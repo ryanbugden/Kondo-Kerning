@@ -1,6 +1,6 @@
 <img src="source/resources/mechanic_icon.png"  width="80">
 
-# Kondo-Kerning
+# Kondo Kerning
 A RoboFont extension for cleaning up kerning and group data in your UFOs.
 
 ## A tour of the interface
