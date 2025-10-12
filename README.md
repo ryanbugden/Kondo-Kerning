@@ -29,7 +29,7 @@ Check this if you would like to remove all groups.
 
 #### Missing Group Members
 
-Check this if you would like to remove any glyphs from a group is they are not present in the font.
+Check this if you would like to remove any glyph names from a group if they are not present in the font.
 
 
 ---
