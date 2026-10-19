@@ -6,17 +6,37 @@ def _kondo_round(x, base=5):
     return base * round(x / base)
 
 
-def _salvage_pair(font, pair):
-    l, r = pair
-    if l not in font.keys() and l not in font.groups.keys():
-        l = ".".join(l.split(".")[2:])
-        if l not in font.keys():
+def _resolve_pair(font, pair, salvage=True):
+    resolved = []
+
+    # Keep valid names; try recovering invalid groups as glyphs.
+    for name in pair:
+        is_group = name.startswith("public.kern")
+
+        # Check validity of group name
+        if is_group:
+            valid = name in font.groups and any(
+                member in font for member in font.groups[name]
+            )
+        # Check validity of glyph name
+        else:
+            valid = name in font
+
+        if valid:
+            resolved.append(name)
+            continue
+
+        if not salvage or not is_group:
             return None
-    if r not in font.keys() and r not in font.groups.keys():
-        r = ".".join(r.split(".")[2:])
-        if r not in font.keys():
+
+        # Try to convert the group name to a glyph name
+        parts = name.split(".", 2)
+        if len(parts) != 3 or parts[2] not in font:
             return None
-    return (l, r) if (l, r) != pair else None
+
+        resolved.append(parts[2])
+
+    return tuple(resolved)
 
 
 def _flatten_kerning(font, group_name):
@@ -73,54 +93,29 @@ def _process_kerning(
                 log(f"\t🫧 Kerning: Removing {pair}   Value: {value}.")
                 font.kerning.pop(pair)
 
-    # Delete empty pairs
+    # Remove invalid pairs, optionally salvaging their values by reassigning the keys
     if clear_missing_kerning:
-        log(f"\t👀 Kerning: Looking for pairs involving glyphs not present in font")
-        for pair, value in font.kerning.items():
-            invalid_names = set()
-            pair_has_valid_glyphs = False
+        log("\t👀 Kerning: Looking for pairs involving glyphs not present in font")
 
-            # Check if both glyph/group names are valid
-            for side in pair:
-                # Invalid group name
-                if "public" in side:
-                    if side not in font.groups.keys():
-                        invalid_names.add(side)
-                        break
-                # Invalid glyph name
-                else:
-                    if side not in font.keys():
-                        invalid_names.add(side)
-                        break
+        for pair, value in list(font.kerning.items()):
+            replacement = _resolve_pair(font, pair, salvage)
 
-            if not invalid_names:
-                pair_has_valid_glyphs = True
-                for side in pair:
-                    # Each side must resolve to an existing glyph.
-                    if side in font.groups:
-                        side_is_valid = any(
-                            member in font for member in font.groups[side]
-                        )
-                    else:
-                        side_is_valid = side in font
-                    if not side_is_valid:
-                        invalid_names.add(side)
-                        pair_has_valid_glyphs = False
+            # Leave valid pairs untouched.
+            if replacement == pair:
+                continue
 
-            if pair_has_valid_glyphs is False:
-                reassigned_pair = _salvage_pair(font, pair)
-                if salvage and reassigned_pair:
-                    log(
-                        f"\t🔀 Kerning: Reassigning pair: {pair} ---> {reassigned_pair}   One or more groups was not present."
-                    )
-                    font.kerning[reassigned_pair] = font.kerning[pair]
-                    font.kerning.pop(pair)
-                else:
-                    log(
-                        f"\t🫧 Kerning: Deleting pair: {pair}   One or more glyphs (or groups) not present.",
-                        f"Invalid names: {invalid_names}. Couldn’t reassign.",
-                    )
-                    font.kerning.pop(pair)
+            if replacement is None:
+                log(f"\t🫧 Kerning: Deleting invalid pair {pair}.")
+            elif replacement in font.kerning:
+                log(
+                    f"\t🫧 Kerning: Deleting {pair}. "
+                    f"Keeping existing value for {replacement}."
+                )
+            else:
+                font.kerning[replacement] = value
+                log(f"\t🔀 Kerning: Reassigning {pair} → {replacement}.")
+
+            del font.kerning[pair]
 
 
 def _process_groups(

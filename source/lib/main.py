@@ -24,7 +24,7 @@ class KondoKerning(ezui.WindowController):
         > ---
         > [X] Missing Group Members    @clearMissingMembersCheckbox
         > ---
-        > [X] Zero-Value Pairs         @clearZeroValueKernsCheckbox
+        > [ ] Zero-Value Pairs         @clearZeroValueKernsCheckbox
         > [ ] All Pairs                @clearAllKerningCheckbox
         > ---
         > [X] Missing Pairs            @clearMissingKerningCheckbox
