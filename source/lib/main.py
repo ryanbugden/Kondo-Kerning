@@ -17,6 +17,8 @@ class KondoKerning(ezui.WindowController):
         > (X) Current Font      @spanRadios
         > ( ) All Fonts
 
+        > ---
+
         > : Clear:
         > [X] Empty Groups             @clearEmptyGroupsCheckbox
         > [X] One-Member Groups        @clearSingleMemberGroupsCheckbox
@@ -29,12 +31,14 @@ class KondoKerning(ezui.WindowController):
         > ---
         > [X] Missing Pairs            @clearMissingKerningCheckbox
         > [X] Try To Salvage           @tryToSalvageCheckbox
+
         > ---
 
-        > : Round:
+        > : Clean Up:
+        > [X] Normalize Group Order    @normalizeGroupOrder
         > * HorizontalStack
-        >> [ ] by               @roundKerningCheckbox
-        >> [_5_]                @roundValueTextField
+        >> [ ] Round Values By         @roundKerningCheckbox
+        >> [_5_]                       @roundValueTextField
 
         ---
 
@@ -42,7 +46,7 @@ class KondoKerning(ezui.WindowController):
         """
 
         descriptionData = dict(
-            form=dict(titleColumnWidth=60, itemColumnWidth=180),
+            form=dict(titleColumnWidth=70, itemColumnWidth=180),
             roundValueTextField=dict(
                 width=50,
                 valueType="integer",
@@ -103,6 +107,7 @@ class KondoKerning(ezui.WindowController):
         clear_missing_kerning = self.w.getItem("clearMissingKerningCheckbox").get()
         clear_all_kerning = self.w.getItem("clearAllKerningCheckbox").get()
         salvage = self.w.getItem("tryToSalvageCheckbox").get()
+        normalize_group_order = self.w.getItem("normalizeGroupOrder").get()
         round_value = [None, int(self.w.getItem("roundValueTextField").get())][
             self.w.getItem("roundKerningCheckbox").get()
         ]
@@ -118,6 +123,7 @@ class KondoKerning(ezui.WindowController):
                 clear_missing_kerning=clear_missing_kerning,
                 clear_all_kerning=clear_all_kerning,
                 salvage=salvage,
+                normalize_group_order=normalize_group_order,
                 round_value=round_value,
                 report=True,
             )

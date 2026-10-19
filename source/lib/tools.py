@@ -124,6 +124,7 @@ def _process_groups(
     clear_all_groups=False,
     clear_missing_members=True,
     clear_single_member_groups=True,
+    normalize_group_order=True,
     report=True,
 ):
     def log(*args):
@@ -176,6 +177,27 @@ def _process_groups(
                 font.groups.pop(group)
                 font.kerning.update(flattened_kerning)
 
+    if normalize_group_order:
+        log("\t👀 Groups: Looking for groups with an unsorted glyph order.")
+        glyph_order = font.glyphOrder
+        for group, members in font.groups.items():
+            # Separate listed members from unlisted members.
+            ordered = []
+            unordered = []
+            for name in members:
+                if name in glyph_order:
+                    ordered.append(name)
+                else:
+                    unordered.append(name)
+            # Sort listed members by glyph order, then unlisted members alphabetically
+            ordered.sort(key=glyph_order.index)
+            unordered.sort()
+            sorted_members = ordered + unordered
+            # Update and report only groups whose order changed
+            if sorted_members != list(members):
+                font.groups[group] = sorted_members
+                log(f"\t↩️ Groups: Sorting members of group {group}.")
+
 
 def kondo_kerning(
     font,
@@ -187,6 +209,7 @@ def kondo_kerning(
     clear_missing_kerning=True,
     clear_all_kerning=False,
     salvage=True,
+    normalize_group_order=True,
     round_value=None,
     report=True,
 ):
@@ -236,6 +259,7 @@ def kondo_kerning(
             clear_all_groups,
             clear_missing_members,
             clear_single_member_groups,
+            normalize_group_order,
         )
     ):
         _process_groups(
@@ -244,6 +268,7 @@ def kondo_kerning(
             clear_all_groups=clear_all_groups,
             clear_missing_members=clear_missing_members,
             clear_single_member_groups=clear_single_member_groups,
+            normalize_group_order=normalize_group_order,
             report=report,
         )
     else:
