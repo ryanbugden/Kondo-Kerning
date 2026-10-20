@@ -41,24 +41,47 @@ def _resolve_pair(font, pair, salvage=True):
 
 def _flatten_kerning(font, group_name):
     """
-    Takes a group that's about to be deleted,
-    looks at all its kerning in the font,
-    returns its flattened kerning.
+    Flattens kerning for a given group:
+    - Sets the pair value for individual members if the exception doesn't already exist
+    - Removes the old grouped kerning
+    - Removes the group
+    - Returned a dict representing the flattened kerning, for log purposes
     """
+
+    def set_value_if_not_present(new_kerning, pair, value):
+        if pair not in font.kerning and pair not in new_kerning:
+            new_kerning[pair] = value
+
     members = font.groups[group_name]
-    new_kerning = {}
+    flattened_kerning = {}
+    pairs_to_remove = set()
     for pair, value in font.kerning.items():
-        if pair[0] == group_name and pair[1] in group_name:
+        # Both sides match given group
+        if pair[0] == group_name and pair[1] == group_name:
+            pairs_to_remove.add(pair)
             for member in members:
                 for other_member in members:
-                    new_kerning[(member, other_member)] = value
+                    set_value_if_not_present(flattened_kerning, (member, other_member), value)
+        # Left matches given group
         elif pair[0] == group_name:
+            pairs_to_remove.add(pair)
             for member in members:
-                new_kerning[(member, pair[1])] = value
+                set_value_if_not_present(flattened_kerning, (member, pair[1]), value)
+        # Right matches given group
         elif pair[1] == group_name:
+            pairs_to_remove.add(pair)
             for member in members:
-                new_kerning[(pair[0], member)] = value
-    return new_kerning
+                set_value_if_not_present(flattened_kerning, (pair[0], member), value)
+    # Remove what was previously group pairs
+    for pair in pairs_to_remove:
+        font.kerning.pop(pair)
+
+    # Remove the group
+    font.groups.pop(group_name)
+    # Update the kerning to be flattened
+    font.kerning.update(flattened_kerning)
+
+    return flattened_kerning
 
 
 def _process_kerning(
@@ -170,12 +193,10 @@ def _process_groups(
             if len(members) == 1:
                 flattened_kerning = _flatten_kerning(font, group)
                 log(
-                    f"\t🫧 Groups: Deleting group {group}.  It had one member. Flattening its kerning:"
+                    f"\t🫧 Groups: Deleting group {group}.  It had one member. Flattened its kerning:"
                 )
                 if report:
                     pprint(flattened_kerning)
-                font.groups.pop(group)
-                font.kerning.update(flattened_kerning)
 
     if normalize_group_order:
         log("\t👀 Groups: Looking for groups with an unsorted glyph order.")
