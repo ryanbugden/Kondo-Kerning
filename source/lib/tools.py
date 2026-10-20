@@ -45,7 +45,7 @@ def _flatten_kerning(font, group_name):
     - Sets the pair value for individual members if the exception doesn't already exist
     - Removes the old grouped kerning
     - Removes the group
-    - Returned a dict representing the flattened kerning, for log purposes
+    - Returns a dict representing the flattened kerning, for log purposes
     """
 
     def set_value_if_not_present(new_kerning, pair, value):
@@ -55,13 +55,15 @@ def _flatten_kerning(font, group_name):
     members = font.groups[group_name]
     flattened_kerning = {}
     pairs_to_remove = set()
-    for pair, value in font.kerning.items():
+    for pair, value in list(font.kerning.items()):
         # Both sides match given group
         if pair[0] == group_name and pair[1] == group_name:
             pairs_to_remove.add(pair)
             for member in members:
                 for other_member in members:
-                    set_value_if_not_present(flattened_kerning, (member, other_member), value)
+                    set_value_if_not_present(
+                        flattened_kerning, (member, other_member), value
+                    )
         # Left matches given group
         elif pair[0] == group_name:
             pairs_to_remove.add(pair)
@@ -148,6 +150,7 @@ def _process_groups(
     clear_missing_members=True,
     clear_single_member_groups=True,
     normalize_group_order=True,
+    salvage=True,
     report=True,
 ):
     def log(*args):
@@ -155,22 +158,38 @@ def _process_groups(
             print(*args)
 
     if clear_all_groups:
-        font.groups.clear()
+        # Flatten groups before removing them
+        for group_name in list(font.groups.keys()):
+            _flatten_kerning(font, group_name)
         log("\t🔥 Groups")
         return
 
     if clear_empty_groups:
         # Delete empty groups
-        log(f"\t👀 Groups: Looking for empty groups")
-        for group, members in font.groups.items():
-            group_has_valid_members = False
-            for member in members:
-                if member in font.keys():
-                    group_has_valid_members = True
-                    break
-            if group_has_valid_members is False:
-                log(f"\t🫧 Groups: Deleting group {group}.  It was empty.")
-                font.groups.pop(group)
+        log("\t👀 Groups: Looking for empty groups")
+        for group, members in list(font.groups.items()):
+            if any(member in font for member in members):
+                continue
+            log(f"\t🫧 Groups: Deleting group {group}. It was empty...")
+            # Salvage or delete each pair referencing this empty group.
+            for pair, value in list(font.kerning.items()):
+                if group not in pair:
+                    continue
+                replacement = _resolve_pair(font, pair, salvage)
+                if replacement is None:
+                    log(f"\t🫧 Kerning: Deleting invalid pair {pair}.")
+                elif replacement in font.kerning:
+                    log(
+                        f"\t🫧 Kerning: Deleting {pair}. "
+                        f"Keeping existing value for {replacement}."
+                    )
+                else:
+                    font.kerning[replacement] = value
+                    log(f"\t🔀 Kerning: Reassigning {pair} → {replacement}.")
+                # Always remove the original reference to the empty group
+                font.kerning.pop(pair)
+            # Remove the group after its individual pairs are taken care of
+            font.groups.pop(group)
 
     if clear_missing_members:
         # Delete members from groups if the member is not in the font
@@ -290,6 +309,7 @@ def kondo_kerning(
             clear_missing_members=clear_missing_members,
             clear_single_member_groups=clear_single_member_groups,
             normalize_group_order=normalize_group_order,
+            salvage=salvage,
             report=report,
         )
     else:

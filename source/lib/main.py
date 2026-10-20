@@ -28,8 +28,10 @@ class KondoKerning(ezui.WindowController):
         > ---
         > [ ] Zero-Value Pairs         @clearZeroValueKernsCheckbox
         > [ ] All Pairs                @clearAllKerningCheckbox
-        > ---
         > [X] Missing Pairs            @clearMissingKerningCheckbox
+
+        > ---
+
         > [X] Try To Salvage           @tryToSalvageCheckbox
 
         > ---
