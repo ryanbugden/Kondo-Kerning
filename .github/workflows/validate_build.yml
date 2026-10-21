@@ -1,10 +1,13 @@
 name: Validate and Build the Extension
+
 on:
-  push
+  push:
 
 jobs:
   validate_and_build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Validate and Build
         uses: ryanbugden/roboFont-Extension-action@main

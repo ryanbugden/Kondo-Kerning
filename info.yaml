@@ -3,12 +3,12 @@ developer: Ryan Bugden
 developerURL: http://ryanbugden.com
 launchAtStartUp: false
 mainScript: main.py
-version: 0.1
+version: 1.0b
 addToMenu:
 - path: main.py
   preferredName: Kondo Kerning
   shortKey: ""
 html: true
-timeStamp: 1760297070
+timeStamp: 1792600164
 requiresVersionMajor: '4'
 requiresVersionMinor: '5'
