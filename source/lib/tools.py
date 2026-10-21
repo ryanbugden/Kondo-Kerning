@@ -6,6 +6,19 @@ def _kondo_round(x, base=5):
     return base * round(x / base)
 
 
+def _is_exception(font, pair):
+    for name, groups in zip(
+        pair,
+        (font.groups.side1KerningGroups, font.groups.side2KerningGroups),
+    ):
+        # If the side is not a group, and it's IN a group, it's an exception
+        if name not in font.groups and any(
+            name in members for members in groups.values()
+        ):
+            return True
+    return False
+
+
 def _resolve_pair(font, pair, salvage=True):
     resolved = []
 
@@ -52,7 +65,8 @@ def _flatten_kerning(font, group_name):
             if value is not None:
                 new_kerning[pair] = value
 
-    members = font.groups[group_name]
+    # Members in group that are in the font
+    members = [name for name in font.groups[group_name] if name in font]
     flattened_kerning = {}
     pairs_to_remove = set()
     # Plan replacements before changing any groups or kerning
@@ -62,9 +76,7 @@ def _flatten_kerning(font, group_name):
             pairs_to_remove.add(pair)
             for member in members:
                 for other_member in members:
-                    set_value_if_not_present(
-                        flattened_kerning, (member, other_member)
-                    )
+                    set_value_if_not_present(flattened_kerning, (member, other_member))
         # Left matches given group
         elif pair[0] == group_name:
             pairs_to_remove.add(pair)
@@ -87,37 +99,25 @@ def _flatten_kerning(font, group_name):
 
     return flattened_kerning
 
+
 def _process_kerning(
     font,
     clear_zero_kerning=False,
     clear_missing_kerning=True,
     clear_all_kerning=False,
-    salvage=True,
     round_value=None,
+    salvage=False,
     report=True,
 ):
     def log(*args):
         if report:
             print(*args)
 
+    # Clear all kerning
     if clear_all_kerning:
         font.kerning.clear()
-        log("\t🔥 Kerning")
+        log("\t🔥 All kerning cleared!")
         return
-
-    # Rounding Kerning
-    if round_value is not None:
-        for pair, value in list(font.kerning.items()):
-            font.kerning[pair] = _kondo_round(value, round_value)
-        log(f"\t🔵 Kerning: Rounded by {round_value}.")
-
-    # Clear zero values
-    if clear_zero_kerning:
-        log(f"\t👀 Kerning: Looking for zero-value pairs")
-        for pair, value in list(font.kerning.items()):
-            if value == 0:
-                log(f"\t🫧 Kerning: Removing {pair}   Value: {value}.")
-                font.kerning.pop(pair)
 
     # Remove invalid pairs, optionally salvaging their values by reassigning the keys
     if clear_missing_kerning:
@@ -143,36 +143,63 @@ def _process_kerning(
 
             del font.kerning[pair]
 
+    # Round pair values
+    if round_value is not None:
+        if round_value <= 0:
+            log(f"⚠️ Round_value must be greater than zero. You gave {round_value}.")
+        else:
+            log(f"\t🔵 Kerning: Rounding by {round_value}.")
+            for pair, value in list(font.kerning.items()):
+                font.kerning[pair] = _kondo_round(value, round_value)
+
+    # Clear zero values
+    if clear_zero_kerning:
+        log(f"\t👀 Kerning: Looking for zero-value pairs that aren’t exceptions.")
+        for pair, value in list(font.kerning.items()):
+            if value == 0:
+                if _is_exception(font, pair):
+                    log(f"\t⏭️ Kerning: Ignoring {pair}   Value: {value}. (Exception)")
+                else:
+                    log(f"\t🫧 Kerning: Removing {pair}   Value: {value}.")
+                    font.kerning.pop(pair)
+
 
 def _process_groups(
     font,
     clear_empty_groups=True,
-    clear_all_groups=False,
-    clear_missing_members=True,
     clear_single_member_groups=True,
+    clear_missing_members=True,
+    clear_all_groups=False,
     normalize_group_order=True,
-    salvage=True,
+    salvage=False,
     report=True,
 ):
     def log(*args):
         if report:
             print(*args)
 
-    if clear_all_groups:
-        # Flatten groups before removing them
-        for group_name in list(font.groups.keys()):
-            _flatten_kerning(font, group_name)
-        log("\t🔥 Groups")
-        return
+    # Delete members from groups if the member is not in the font
+    if clear_missing_members:
+        log(f"\t👀 Groups: Looking for group members that are missing in the font.")
+        for group, members in list(font.groups.items()):
+            new_members = []
+            for member in members:
+                if member in font.keys():
+                    new_members.append(member)
+                else:
+                    log(
+                        f"\t🫧 Groups: Removing group member {member} from group {group}."
+                    )
+            font.groups[group] = new_members
 
-    if clear_empty_groups:
-        # Delete empty groups
+    # Delete empty groups. If clearing all groups, use this to try and salvage, too.
+    if clear_empty_groups or clear_all_groups:
         log("\t👀 Groups: Looking for empty groups")
         for group, members in list(font.groups.items()):
             if any(member in font for member in members):
                 continue
             log(f"\t🫧 Groups: Deleting group {group}. It was empty...")
-            # Salvage or delete each pair referencing this empty group.
+            # Salvage or delete each pair referencing this empty group
             for pair, value in list(font.kerning.items()):
                 if group not in pair:
                     continue
@@ -192,22 +219,15 @@ def _process_groups(
             # Remove the group after its individual pairs are taken care of
             font.groups.pop(group)
 
-    if clear_missing_members:
-        # Delete members from groups if the member is not in the font
-        log(f"\t👀 Groups: Looking for group members that are missing in the font.")
-        for group, members in list(font.groups.items()):
-            new_members = []
-            for member in members:
-                if member in font.keys():
-                    new_members.append(member)
-                else:
-                    log(
-                        f"\t🫧 Groups: Removing group member {member} from group {group}."
-                    )
-            font.groups[group] = new_members
+    # Flatten groups before removing them
+    if clear_all_groups:
+        for group_name in list(font.groups.keys()):
+            _flatten_kerning(font, group_name)
+        log("\t🔥 All groups cleared and kerning flattened!")
+        return
 
+    # Delete groups that only have one member
     if clear_single_member_groups:
-        # Delete groups that only have one member
         log(f"\t👀 Groups: Looking for single-member groups.")
         for group, members in list(font.groups.items()):
             if len(members) == 1:
@@ -218,6 +238,7 @@ def _process_groups(
                 if report:
                     pprint(flattened_kerning)
 
+    # Normalize the order of members in each group, according to glyph order
     if normalize_group_order:
         log("\t👀 Groups: Looking for groups with an unsorted glyph order.")
         glyph_order = font.glyphOrder
@@ -243,22 +264,21 @@ def _process_groups(
 def kondo_kerning(
     font,
     clear_empty_groups=True,
-    clear_all_groups=False,
-    clear_zero_kerning=False,
-    clear_missing_members=True,
     clear_single_member_groups=True,
+    clear_missing_members=True,
+    clear_all_groups=False,
+    normalize_group_order=True,
+    clear_zero_kerning=False,
     clear_missing_kerning=True,
     clear_all_kerning=False,
-    salvage=True,
-    normalize_group_order=True,
     round_value=None,
+    salvage=False,
     report=True,
 ):
-    """Run the existing cleanup algorithm on one font in place.
+    """Run the Kondo Kerning cleanup algorithm on one font in place.
 
-    Defaults match the UI. Set report=False to suppress console output.
-    round_value=None disables rounding. The font is returned without saving.
-    This structural refactor retains the existing cleanup order and logic.
+    - Defaults match the UI. Set report=False to suppress console output.
+    - round_value=None disables rounding. The font is returned without saving.
 
     Examples:
         kondo_kerning(font, clear_zero_kerning=False)
@@ -286,8 +306,8 @@ def kondo_kerning(
             clear_zero_kerning=clear_zero_kerning,
             clear_missing_kerning=clear_missing_kerning,
             clear_all_kerning=clear_all_kerning,
-            salvage=salvage,
             round_value=round_value,
+            salvage=salvage,
             report=report,
         )
     else:
@@ -306,9 +326,9 @@ def kondo_kerning(
         _process_groups(
             font,
             clear_empty_groups=clear_empty_groups,
-            clear_all_groups=clear_all_groups,
-            clear_missing_members=clear_missing_members,
             clear_single_member_groups=clear_single_member_groups,
+            clear_missing_members=clear_missing_members,
+            clear_all_groups=clear_all_groups,
             normalize_group_order=normalize_group_order,
             salvage=salvage,
             report=report,

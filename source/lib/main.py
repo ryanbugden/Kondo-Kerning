@@ -19,28 +19,27 @@ class KondoKerning(ezui.WindowController):
 
         > ---
 
-        > : Clear:
-        > [X] Empty Groups             @clearEmptyGroupsCheckbox
-        > [X] One-Member Groups        @clearSingleMemberGroupsCheckbox
-        > [ ] All Groups               @clearAllGroupsCheckbox
-        > ---
-        > [X] Missing Group Members    @clearMissingMembersCheckbox
-        > ---
-        > [ ] Zero-Value Pairs         @clearZeroValueKernsCheckbox
-        > [ ] All Pairs                @clearAllKerningCheckbox
-        > [X] Missing Pairs            @clearMissingKerningCheckbox
+        > : Groups:
+        > [X] Clear Empty Groups             @clearEmptyGroupsCheckbox
+        > [X] Clear One-Member Groups        @clearSingleMemberGroupsCheckbox
+        > [X] Clear Missing Group Members    @clearMissingMembersCheckbox
+        > [ ] Clear All Groups               @clearAllGroupsCheckbox
+        > [X] Normalize Group Order          @normalizeGroupOrder
 
         > ---
 
-        > [X] Try To Salvage           @tryToSalvageCheckbox
+        > : Kerning:
 
-        > ---
-
-        > : Clean Up:
-        > [X] Normalize Group Order    @normalizeGroupOrder
+        > [ ] Clear Zero-Value Pairs         @clearZeroValueKernsCheckbox
+        > [X] Clear Missing Pairs            @clearMissingKerningCheckbox
+        > [ ] Clear All Pairs                @clearAllKerningCheckbox
         > * HorizontalStack
-        >> [ ] Round Values By         @roundKerningCheckbox
-        >> [_5_]                       @roundValueTextField
+        >> [ ] Round Values By               @roundKerningCheckbox
+        >> [_5_]                             @roundValueTextField
+
+        > ---
+
+        > [ ] Try To Salvage           @tryToSalvageCheckbox
 
         ---
 
@@ -48,9 +47,9 @@ class KondoKerning(ezui.WindowController):
         """
 
         descriptionData = dict(
-            form=dict(titleColumnWidth=70, itemColumnWidth=180),
+            form=dict(titleColumnWidth=70, itemColumnWidth=210),
             roundValueTextField=dict(
-                width=50,
+                width="fill",
                 valueType="integer",
             ),
             applyButton=dict(width="fill"),
@@ -98,7 +97,16 @@ class KondoKerning(ezui.WindowController):
         self.w.getItem("roundValueTextField").enable(sender.get())
 
     def applyButtonCallback(self, sender):
-        fonts = [[CurrentFont()], AllFonts()][self.w.getItem("spanRadios").get()]
+        # Require a font first
+        all_fonts = AllFonts()
+        if not all_fonts:
+            print("[Kondo Kerning] Open a font first.")
+            return
+
+        if self.w.getItem("spanRadios").get() == 0:
+            fonts = [all_fonts[0]]
+        else:
+            fonts = all_fonts
         clear_empty_groups = self.w.getItem("clearEmptyGroupsCheckbox").get()
         clear_all_groups = self.w.getItem("clearAllGroupsCheckbox").get()
         clear_zero_kerning = self.w.getItem("clearZeroValueKernsCheckbox").get()
@@ -110,23 +118,23 @@ class KondoKerning(ezui.WindowController):
         clear_all_kerning = self.w.getItem("clearAllKerningCheckbox").get()
         salvage = self.w.getItem("tryToSalvageCheckbox").get()
         normalize_group_order = self.w.getItem("normalizeGroupOrder").get()
-        round_value = [None, int(self.w.getItem("roundValueTextField").get())][
-            self.w.getItem("roundKerningCheckbox").get()
-        ]
+        round_value = None
+        if self.w.getItem("roundKerningCheckbox").get():
+            round_value = int(self.w.getItem("roundValueTextField").get())
 
         for font in fonts:
             tools.kondo_kerning(
                 font,
                 clear_empty_groups=clear_empty_groups,
-                clear_all_groups=clear_all_groups,
-                clear_zero_kerning=clear_zero_kerning,
-                clear_missing_members=clear_missing_members,
                 clear_single_member_groups=clear_single_member_groups,
+                clear_missing_members=clear_missing_members,
+                clear_all_groups=clear_all_groups,
+                normalize_group_order=normalize_group_order,
+                clear_zero_kerning=clear_zero_kerning,
                 clear_missing_kerning=clear_missing_kerning,
                 clear_all_kerning=clear_all_kerning,
-                salvage=salvage,
-                normalize_group_order=normalize_group_order,
                 round_value=round_value,
+                salvage=salvage,
                 report=True,
             )
 
