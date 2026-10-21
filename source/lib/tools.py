@@ -1,4 +1,4 @@
-from pprint import pprint
+from pprint import pformat
 from mojo.roboFont import RFont
 
 
@@ -116,12 +116,12 @@ def _process_kerning(
     # Clear all kerning
     if clear_all_kerning:
         font.kerning.clear()
-        log("\t🔥 All kerning cleared!")
+        log("🔥 All kerning cleared!")
         return
 
     # Remove invalid pairs, optionally salvaging their values by reassigning the keys
     if clear_missing_kerning:
-        log("\t👀 Kerning: Looking for pairs involving glyphs not present in font")
+        log("👀 Kerning: Looking for pairs involving glyphs not present in font")
 
         for pair, value in list(font.kerning.items()):
             replacement = _resolve_pair(font, pair, salvage)
@@ -148,13 +148,13 @@ def _process_kerning(
         if round_value <= 0:
             log(f"⚠️ Round_value must be greater than zero. You gave {round_value}.")
         else:
-            log(f"\t🔵 Kerning: Rounding by {round_value}.")
+            log(f"🔵 Kerning: Rounding by {round_value}.")
             for pair, value in list(font.kerning.items()):
                 font.kerning[pair] = _kondo_round(value, round_value)
 
     # Clear zero values
     if clear_zero_kerning:
-        log(f"\t👀 Kerning: Looking for zero-value pairs that aren’t exceptions.")
+        log(f"👀 Kerning: Looking for zero-value pairs that aren’t exceptions.")
         for pair, value in list(font.kerning.items()):
             if value == 0:
                 if _is_exception(font, pair):
@@ -180,7 +180,7 @@ def _process_groups(
 
     # Delete members from groups if the member is not in the font
     if clear_missing_members:
-        log(f"\t👀 Groups: Looking for group members that are missing in the font.")
+        log(f"👀 Groups: Looking for group members that are missing in the font.")
         for group, members in list(font.groups.items()):
             new_members = []
             for member in members:
@@ -194,7 +194,7 @@ def _process_groups(
 
     # Delete empty groups. If clearing all groups, use this to try and salvage, too.
     if clear_empty_groups or clear_all_groups:
-        log("\t👀 Groups: Looking for empty groups")
+        log("👀 Groups: Looking for empty groups")
         for group, members in list(font.groups.items()):
             if any(member in font for member in members):
                 continue
@@ -223,24 +223,26 @@ def _process_groups(
     if clear_all_groups:
         for group_name in list(font.groups.keys()):
             _flatten_kerning(font, group_name)
-        log("\t🔥 All groups cleared and kerning flattened!")
+        log("🔥 All groups cleared and kerning flattened!")
         return
 
     # Delete groups that only have one member
     if clear_single_member_groups:
-        log(f"\t👀 Groups: Looking for single-member groups.")
+        log(f"👀 Groups: Looking for single-member groups.")
         for group, members in list(font.groups.items()):
             if len(members) == 1:
                 flattened_kerning = _flatten_kerning(font, group)
                 log(
                     f"\t🫧 Groups: Deleting group {group}.  It had one member. Flattened its kerning:"
                 )
+                # Show flattened kerning with 2 tabs
                 if report:
-                    pprint(flattened_kerning)
+                    for line in pformat(flattened_kerning).splitlines():
+                        print("\t\t" + line)
 
     # Normalize the order of members in each group, according to glyph order
     if normalize_group_order:
-        log("\t👀 Groups: Looking for groups with an unsorted glyph order.")
+        log("👀 Groups: Looking for groups with an unsorted glyph order.")
         glyph_order = font.glyphOrder
         for group, members in list(font.groups.items()):
             # Separate listed members from unlisted members.
@@ -289,8 +291,13 @@ def kondo_kerning(
         if report:
             print(*args)
 
-    log("\n*********************\nKondo Kerning Report:\n*********************")
-    log(font.info.familyName, font.info.styleName)
+    font_name = f"{font.info.familyName} - {font.info.styleName}"
+    title = "Kondo Kerning Report:"
+    border = "*" * max(len(font_name), len(title))
+    log(f"\n{border}")
+    log(title)
+    log(font_name)
+    log("\n")
 
     # Kerning
     if any(
@@ -336,7 +343,8 @@ def kondo_kerning(
     else:
         log("\t🆗 Skipping Groups.")
 
-    log("Kondo Kerning done.\n*********************")
+    log("Kondo Kerning done.")
+    log(border)
     font.changed()
 
     return font
