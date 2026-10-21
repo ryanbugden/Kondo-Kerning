@@ -279,12 +279,9 @@ def kondo_kerning(
 ):
     """Run the Kondo Kerning cleanup algorithm on one font in place.
 
-    - Defaults match the UI. Set report=False to suppress console output.
-    - round_value=None disables rounding. The font is returned without saving.
-
-    Examples:
-        kondo_kerning(font, clear_zero_kerning=False)
-        font.kondoKerning(round_value=5, report=False)
+    Example:
+        for f in AllFonts():
+            f.kondoKerning(round_value=5)
     """
 
     def log(*args):
