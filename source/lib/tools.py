@@ -18,14 +18,13 @@ def _resolve_pair(font, pair, salvage=True):
             valid = name in font.groups and any(
                 member in font for member in font.groups[name]
             )
+
         # Check validity of glyph name
         else:
             valid = name in font
-
         if valid:
             resolved.append(name)
             continue
-
         if not salvage or not is_group:
             return None
 
@@ -33,7 +32,6 @@ def _resolve_pair(font, pair, salvage=True):
         parts = name.split(".", 2)
         if len(parts) != 3 or parts[2] not in font:
             return None
-
         resolved.append(parts[2])
 
     return tuple(resolved)
@@ -42,38 +40,42 @@ def _resolve_pair(font, pair, salvage=True):
 def _flatten_kerning(font, group_name):
     """
     Flattens kerning for a given group:
-    - Sets the pair value for individual members if the exception doesn't already exist
+    - Uses resolved values while preserving existing destination pairs
     - Removes the old grouped kerning
     - Removes the group
     - Returns a dict representing the flattened kerning, for log purposes
     """
 
-    def set_value_if_not_present(new_kerning, pair, value):
+    def set_value_if_not_present(new_kerning, pair):
         if pair not in font.kerning and pair not in new_kerning:
-            new_kerning[pair] = value
+            value = font.kerning.find(pair, default=None)
+            if value is not None:
+                new_kerning[pair] = value
 
     members = font.groups[group_name]
     flattened_kerning = {}
     pairs_to_remove = set()
-    for pair, value in list(font.kerning.items()):
+    # Plan replacements before changing any groups or kerning
+    for pair in list(font.kerning.keys()):
         # Both sides match given group
         if pair[0] == group_name and pair[1] == group_name:
             pairs_to_remove.add(pair)
             for member in members:
                 for other_member in members:
                     set_value_if_not_present(
-                        flattened_kerning, (member, other_member), value
+                        flattened_kerning, (member, other_member)
                     )
         # Left matches given group
         elif pair[0] == group_name:
             pairs_to_remove.add(pair)
             for member in members:
-                set_value_if_not_present(flattened_kerning, (member, pair[1]), value)
+                set_value_if_not_present(flattened_kerning, (member, pair[1]))
         # Right matches given group
         elif pair[1] == group_name:
             pairs_to_remove.add(pair)
             for member in members:
-                set_value_if_not_present(flattened_kerning, (pair[0], member), value)
+                set_value_if_not_present(flattened_kerning, (pair[0], member))
+
     # Remove what was previously group pairs
     for pair in pairs_to_remove:
         font.kerning.pop(pair)
@@ -84,7 +86,6 @@ def _flatten_kerning(font, group_name):
     font.kerning.update(flattened_kerning)
 
     return flattened_kerning
-
 
 def _process_kerning(
     font,
@@ -106,14 +107,14 @@ def _process_kerning(
 
     # Rounding Kerning
     if round_value is not None:
-        for pair, value in font.kerning.items():
+        for pair, value in list(font.kerning.items()):
             font.kerning[pair] = _kondo_round(value, round_value)
         log(f"\t🔵 Kerning: Rounded by {round_value}.")
 
     # Clear zero values
     if clear_zero_kerning:
         log(f"\t👀 Kerning: Looking for zero-value pairs")
-        for pair, value in font.kerning.items():
+        for pair, value in list(font.kerning.items()):
             if value == 0:
                 log(f"\t🫧 Kerning: Removing {pair}   Value: {value}.")
                 font.kerning.pop(pair)
@@ -194,7 +195,7 @@ def _process_groups(
     if clear_missing_members:
         # Delete members from groups if the member is not in the font
         log(f"\t👀 Groups: Looking for group members that are missing in the font.")
-        for group, members in font.groups.items():
+        for group, members in list(font.groups.items()):
             new_members = []
             for member in members:
                 if member in font.keys():
@@ -208,7 +209,7 @@ def _process_groups(
     if clear_single_member_groups:
         # Delete groups that only have one member
         log(f"\t👀 Groups: Looking for single-member groups.")
-        for group, members in font.groups.items():
+        for group, members in list(font.groups.items()):
             if len(members) == 1:
                 flattened_kerning = _flatten_kerning(font, group)
                 log(
@@ -220,7 +221,7 @@ def _process_groups(
     if normalize_group_order:
         log("\t👀 Groups: Looking for groups with an unsorted glyph order.")
         glyph_order = font.glyphOrder
-        for group, members in font.groups.items():
+        for group, members in list(font.groups.items()):
             # Separate listed members from unlisted members.
             ordered = []
             unordered = []
