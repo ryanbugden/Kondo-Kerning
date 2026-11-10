@@ -124,7 +124,7 @@ Clean up kerning and groups in a font. Changes are applied directly to the font 
 
 `clear_redundant_exceptions`
 
-**Boolean**. Remove exceptions that match their less-specific counterpart’s value, including zero-value exceptions with no fallback.
+**Boolean**. Remove exceptions that match their less-specific fallback’s value, including zero-value exceptions with no fallback.
 
 `clear_all_kerning`
 
