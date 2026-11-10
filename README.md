@@ -81,6 +81,7 @@ RFont.kondoKerning(
     # Kerning
     clear_zero_kerning=False,
     clear_missing_kerning=True,
+    clear_redundant_exceptions=False,
     clear_all_kerning=False,
     round_value=None,
     # General
@@ -120,6 +121,10 @@ Clean up kerning and groups in a font. Changes are applied directly to the font 
 `clear_missing_kerning`
 
 **Boolean**. Remove pairs involving missing glyphs, missing groups, or groups with no glyphs present in the font. Set `salvage=True` to attempt recovery instead.
+
+`clear_redundant_exceptions`
+
+**Boolean**. Remove exceptions that match their less-specific counterpart’s value, including zero-value exceptions with no fallback.
 
 `clear_all_kerning`
 

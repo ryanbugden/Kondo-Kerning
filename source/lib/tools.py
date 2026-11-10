@@ -7,31 +7,50 @@ def _kondo_round(x, base=5):
 
 
 def _is_exception(font, pair):
+    """
+    Returns a tuple of booleans, representing on
+    each side whether it’s an exception.
+    """
+    exceptions = []
     for name, groups in zip(
         pair,
         (font.groups.side1KerningGroups, font.groups.side2KerningGroups),
     ):
         # If the side is not a group, and it's IN a group, it's an exception
-        if name not in font.groups and any(
+        is_exception = name not in font.groups and any(
             name in members for members in groups.values()
-        ):
-            return True
-    return False
+        )
+        exceptions.append(is_exception)
+
+    return tuple(exceptions)
+
+
+def _get_groups_for_glyph(font, glyph_name):
+    """
+    Returns a tuple of two groups for a given glyph.
+    If it doesn’t have a group on a given side, returns None.
+    """
+    group_names = font.groups.findGlyph(glyph_name)
+    side_1, side_2 = None, None
+    for group_name in group_names:
+        if group_name in font.groups.side1KerningGroups:
+            side_1 = group_name
+        elif group_name in font.groups.side2KerningGroups:
+            side_2 = group_name
+
+    return side_1, side_2
 
 
 def _resolve_pair(font, pair, salvage=True):
     resolved = []
-
     # Keep valid names; try recovering invalid groups as glyphs.
     for name in pair:
         is_group = name.startswith("public.kern")
-
         # Check validity of group name
         if is_group:
             valid = name in font.groups and any(
                 member in font for member in font.groups[name]
             )
-
         # Check validity of glyph name
         else:
             valid = name in font
@@ -40,7 +59,6 @@ def _resolve_pair(font, pair, salvage=True):
             continue
         if not salvage or not is_group:
             return None
-
         # Try to convert the group name to a glyph name
         parts = name.split(".", 2)
         if len(parts) != 3 or parts[2] not in font:
@@ -105,6 +123,7 @@ def _process_kerning(
     clear_zero_kerning=False,
     clear_missing_kerning=True,
     clear_all_kerning=False,
+    clear_redundant_exceptions=False,
     round_value=None,
     salvage=False,
     report=True,
@@ -131,15 +150,15 @@ def _process_kerning(
                 continue
 
             if replacement is None:
-                log(f"\t🫧 Kerning: Deleting invalid pair {pair}.")
+                log(f"\t🫧 Deleting invalid pair {pair}.")
             elif replacement in font.kerning:
                 log(
-                    f"\t🫧 Kerning: Deleting {pair}. "
+                    f"\t🫧 Deleting {pair}. "
                     f"Keeping existing value for {replacement}."
                 )
             else:
                 font.kerning[replacement] = value
-                log(f"\t🔀 Kerning: Reassigning {pair} → {replacement}.")
+                log(f"\t🔀 Reassigning {pair} → {replacement}.")
 
             del font.kerning[pair]
 
@@ -152,15 +171,62 @@ def _process_kerning(
             for pair, value in list(font.kerning.items()):
                 font.kerning[pair] = _kondo_round(value, round_value)
 
+    if clear_redundant_exceptions:
+        # Redundant exception logic by Tal Leming and reformatted for Kondo Kerning."
+        log(f"👀 Kerning: Looking for redundant exceptions.")
+
+        for pair in list(font.kerning.keys()):
+            if pair not in font.kerning:
+                continue
+            side_1, side_2 = pair
+            exceptions = _is_exception(font, pair)
+            if not any(exceptions):
+                continue
+            value = font.kerning[pair]
+            priority_key = None
+            # Both sides are exceptions
+            if all(exceptions):
+                side_1_group, side_2_group = (
+                    _get_groups_for_glyph(font, side_1)[0],
+                    _get_groups_for_glyph(font, side_2)[1],
+                )
+                if (side_1, side_2_group) in font.kerning:
+                    priority_key = (side_1, side_2_group)
+                elif (side_1_group, side_2) in font.kerning:
+                    priority_key = (side_1_group, side_2)
+                elif (side_1_group, side_2_group) in font.kerning:
+                    priority_key = (side_1_group, side_2_group)
+            # First side is an exception
+            elif exceptions[0]:
+                side_1_group = _get_groups_for_glyph(font, side_1)[0]
+                if (side_1_group, side_2) in font.kerning:
+                    priority_key = (side_1_group, side_2)
+            # Second side is an exception
+            elif exceptions[1]:
+                side_2_group = _get_groups_for_glyph(font, side_2)[1]
+                if (side_1, side_2_group) in font.kerning:
+                    priority_key = (side_1, side_2_group)
+            priority_value = (
+                font.kerning[priority_key] if priority_key is not None else None
+            )
+            # Remove exceptions that match their fallback, including implied zero.
+            if value == priority_value or (value == 0 and priority_value is None):
+                log(f"\t🫧 Deleting redundant exception {pair}   Value: {value}.")
+                if priority_key is None:
+                    log("\t\t🪹 No fallback pair.")
+                else:
+                    log(f"\t\t📌 Keeping {priority_key}   Value: {priority_value}.")
+                del font.kerning[pair]
+
     # Clear zero values
     if clear_zero_kerning:
         log(f"👀 Kerning: Looking for zero-value pairs that aren’t exceptions.")
         for pair, value in list(font.kerning.items()):
             if value == 0:
-                if _is_exception(font, pair):
-                    log(f"\t⏭️ Kerning: Ignoring {pair}   Value: {value}. (Exception)")
+                if any(_is_exception(font, pair)):
+                    log(f"\t⏭️ Ignoring {pair}   Value: {value}. (Exception)")
                 else:
-                    log(f"\t🫧 Kerning: Removing {pair}   Value: {value}.")
+                    log(f"\t🫧 Removing {pair}   Value: {value}.")
                     font.kerning.pop(pair)
 
 
@@ -187,9 +253,7 @@ def _process_groups(
                 if member in font.keys():
                     new_members.append(member)
                 else:
-                    log(
-                        f"\t🫧 Groups: Removing group member {member} from group {group}."
-                    )
+                    log(f"\t🫧 Removing group member {member} from group {group}.")
             font.groups[group] = new_members
 
     # Delete empty groups. If clearing all groups, use this to try and salvage, too.
@@ -198,22 +262,22 @@ def _process_groups(
         for group, members in list(font.groups.items()):
             if any(member in font for member in members):
                 continue
-            log(f"\t🫧 Groups: Deleting group {group}. It was empty...")
+            log(f"\t🫧 Deleting group {group}. It was empty...")
             # Salvage or delete each pair referencing this empty group
             for pair, value in list(font.kerning.items()):
                 if group not in pair:
                     continue
                 replacement = _resolve_pair(font, pair, salvage)
                 if replacement is None:
-                    log(f"\t🫧 Kerning: Deleting invalid pair {pair}.")
+                    log(f"\t🫧 Deleting invalid pair {pair}.")
                 elif replacement in font.kerning:
                     log(
-                        f"\t🫧 Kerning: Deleting {pair}. "
+                        f"\t🫧 Deleting pair {pair}. "
                         f"Keeping existing value for {replacement}."
                     )
                 else:
                     font.kerning[replacement] = value
-                    log(f"\t🔀 Kerning: Reassigning {pair} → {replacement}.")
+                    log(f"\t🔀 Reassigning pair {pair} → {replacement}.")
                 # Always remove the original reference to the empty group
                 font.kerning.pop(pair)
             # Remove the group after its individual pairs are taken care of
@@ -230,10 +294,10 @@ def _process_groups(
     if clear_single_member_groups:
         log(f"👀 Groups: Looking for single-member groups.")
         for group, members in list(font.groups.items()):
-            if len(members) == 1:
+            if len(members) == 1 and members[0] in font:
                 flattened_kerning = _flatten_kerning(font, group)
                 log(
-                    f"\t🫧 Groups: Deleting group {group}.  It had one member. Flattened its kerning:"
+                    f"\t🫧 Deleting group {group}.  It had one member. Flattened its kerning:"
                 )
                 # Show flattened kerning with 2 tabs
                 if report:
@@ -260,7 +324,7 @@ def _process_groups(
             # Update and report only groups whose order changed
             if sorted_members != list(members):
                 font.groups[group] = sorted_members
-                log(f"\t↩️ Groups: Sorting members of group {group}.")
+                log(f"\t↩️ Sorting members of group {group}.")
 
 
 def kondo_kerning(
@@ -272,6 +336,7 @@ def kondo_kerning(
     normalize_group_order=True,
     clear_zero_kerning=False,
     clear_missing_kerning=True,
+    clear_redundant_exceptions=False,
     clear_all_kerning=False,
     round_value=None,
     salvage=False,
@@ -301,6 +366,7 @@ def kondo_kerning(
         (
             clear_zero_kerning,
             clear_missing_kerning,
+            clear_redundant_exceptions,
             clear_all_kerning,
             round_value is not None,
         )
@@ -309,6 +375,7 @@ def kondo_kerning(
             font,
             clear_zero_kerning=clear_zero_kerning,
             clear_missing_kerning=clear_missing_kerning,
+            clear_redundant_exceptions=clear_redundant_exceptions,
             clear_all_kerning=clear_all_kerning,
             round_value=round_value,
             salvage=salvage,

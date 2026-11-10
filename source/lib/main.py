@@ -3,9 +3,13 @@
 
 from importlib import reload
 import ezui
+from mojo.extensions import setExtensionDefault, getExtensionDefault
 import tools
 
 reload(tools)
+
+
+EXT_KEY = "com.ryanbugden.kondoKerning"
 
 
 class KondoKerning(ezui.WindowController):
@@ -33,6 +37,7 @@ class KondoKerning(ezui.WindowController):
         > [ ] Clear Zero-Value Pairs         @clearZeroValueKernsCheckbox
         > [X] Clear Missing Pairs            @clearMissingKerningCheckbox
         > [ ] Clear All Pairs                @clearAllKerningCheckbox
+        > [ ] Clear Redundant Exceptions     @clearRedundantExceptionsCheckbox
         > * HorizontalStack
         >> [ ] Round Values By               @roundKerningCheckbox
         >> [_5_]                             @roundValueTextField
@@ -62,36 +67,22 @@ class KondoKerning(ezui.WindowController):
         )
         self.w.getNSWindow().setTitlebarAppearsTransparent_(True)
         self.w.setDefaultButton(self.w.getItem("applyButton"))
-        # All group checkboxes except for All
-        self.group_checkboxes = [
-            self.w.getItem(item)
-            for item in self.w.getItems().keys()
-            if "group" in item.lower()
-            and "checkbox" in item.lower()
-            and "all" not in item.lower()
-        ]
-        # All kern checkboxes except for All
-        self.kern_checkboxes = [
-            self.w.getItem(item)
-            for item in self.w.getItems().keys()
-            if "kern" in item.lower()
-            and "checkbox" in item.lower()
-            and "all" not in item.lower()
-        ]
+
+        # Restore UI values
+        try:
+            self.w.setItemValues(
+                getExtensionDefault(EXT_KEY, fallback=self.w.getItemValues())
+            )
+        except KeyError:
+            pass
+
         self.roundKerningCheckboxCallback(self.w.getItem("roundKerningCheckbox"))
 
     def started(self):
         self.w.open()
 
-    # # Automatically uncheck other boxes
-    # def clearAllGroupsCheckboxCallback(self, sender):
-    #     if sender.get():
-    #         for checkbox in self.group_checkboxes:
-    #             checkbox.set(False)
-    # def clearAllKerningCheckboxCallback(self, sender):
-    #     if sender.get():
-    #         for checkbox in self.kern_checkboxes:
-    #             checkbox.set(False)
+    def destroy(self):
+        setExtensionDefault(EXT_KEY, self.w.getItemValues())
 
     def roundKerningCheckboxCallback(self, sender):
         self.w.getItem("roundValueTextField").enable(sender.get())
@@ -115,6 +106,9 @@ class KondoKerning(ezui.WindowController):
             "clearSingleMemberGroupsCheckbox"
         ).get()
         clear_missing_kerning = self.w.getItem("clearMissingKerningCheckbox").get()
+        clear_redundant_exceptions = self.w.getItem(
+            "clearRedundantExceptionsCheckbox"
+        ).get()
         clear_all_kerning = self.w.getItem("clearAllKerningCheckbox").get()
         salvage = self.w.getItem("tryToSalvageCheckbox").get()
         normalize_group_order = self.w.getItem("normalizeGroupOrder").get()
@@ -132,6 +126,7 @@ class KondoKerning(ezui.WindowController):
                 normalize_group_order=normalize_group_order,
                 clear_zero_kerning=clear_zero_kerning,
                 clear_missing_kerning=clear_missing_kerning,
+                clear_redundant_exceptions=clear_redundant_exceptions,
                 clear_all_kerning=clear_all_kerning,
                 round_value=round_value,
                 salvage=salvage,
