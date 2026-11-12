@@ -64,6 +64,9 @@ def _resolve_pair(font, pair, salvage=True):
         if len(parts) != 3 or parts[2] not in font:
             return None
         resolved.append(parts[2])
+        # Don’t salvage if glyph is already in another group on this side
+        if _get_groups_for_glyph(font, parts[2])[len(resolved) - 1] is not None:
+            return None
 
     return tuple(resolved)
 
